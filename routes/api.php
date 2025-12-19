@@ -38,7 +38,7 @@ Route::get('/events/{event}', [EventController::class, 'show']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/events/{event}/book', [BookingController::class, 'book']);
     Route::get('/my-bookings', [BookingController::class, 'myBooking']);
-    Route::delete('/bookings/{booking}', [BookingController::class, 'cancel']);
+    Route::delete('/my-bookings/{booking}', [BookingController::class, 'cancel']);
 });
 
 
