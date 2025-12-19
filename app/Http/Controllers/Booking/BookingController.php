@@ -9,40 +9,43 @@ use App\Models\Event;
 use App\Models\Booking;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
+
 
 class BookingController extends Controller
 {
-    public function book(Request $request, $eventId)
+    public function book(Event $event)
     {
         $user = Auth::user();
-        $event = Event::find($eventId);
+        $this->authorize('create', Booking::class);
 
-        if (!$event) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Event not found'
-            ], 404);
-        }
-        $booking = Booking::where('user_id', $user->id)->where('event_id', $eventId)->exists();
+
+        $booking = Booking::where('user_id', $user->id)->where('event_id', $event->id)->exists();
         if ($booking) {
             return response()->json([
                 'success' => false,
                 'message' => 'You already booked this event'
-            ], 400);
+            ], 409);
         }
         if ($event->available_seats <= 0) {
             return response()->json([
                 'success' => false,
                 'message' => 'No Available seats'
-            ], 200);
+            ], 409);
         }
 
-        $booking = Booking::create([
-            "user_id" => $user->id,
-            "event_id" =>  $eventId,
-            "status" => $request->status ?? 'confirmed'
-        ]);
-        $event->decrement('available_seats');
+        $booking = DB::transaction(function () use ($user, $event) {
+            $booking = Booking::create([
+                'user_id'  => $user->id,
+                'event_id' => $event->id,
+                'status'   => 'confirmed'
+            ]);
+
+            $event->decrement('available_seats');
+
+            return $booking;
+        });
 
         return response()->json([
             'success' => true,
@@ -54,41 +57,48 @@ class BookingController extends Controller
     public function myBooking()
     {
         $user = Auth::user();
-        $bookings = Booking::with('event')->where("user_id", $user->id)->get();
-        return response()->json([
+        $bookings = Booking::with('event')
+            ->where('user_id', $user->id)
+            ->latest()
+            ->paginate(10);
+
+        return BookingResource::collection($bookings)->additional([
             'success' => true,
-            'booking' => BookingResource::collection($bookings),
-        ], 200);
+            'pages_left' => $bookings->lastPage() - $bookings->currentPage(),
+            'total' => $bookings->total(),
+        ]);
     }
 
-    public function cancel(Request $request, $id)
+    public function cancel(Booking $booking)
     {
-
+        $this->authorize('cancel', $booking);
         $user = Auth::user();
-        $booking = Booking::with(['event:id,date'])->where('id', $id)->where('user_id', $user->id)->first();
-        if (!$booking) {
+        // $booking = Booking::with(['event:id,date'])->where('id', $booking->id)->where('user_id', $user->id)->first();
+        if ($booking->status === 'cancelled') {
             return response()->json([
                 'success' => false,
-                'message' => "Booking not found",
-            ], 404);
+                'message' => 'Booking already cancelled'
+            ], 409);
         }
+
         if ($booking->status === "cancelled") {
             return response()->json([
                 'success' => false,
                 'message' => "Booking already cancelled",
-            ], 400);
+            ], 409);
         }
-        $eventDate = $booking->event->date;
-        $daysUntilEvent = (int)  now()->diffInDays($eventDate);
-        if($daysUntilEvent <3){
-             return response()->json([
+
+        if (now()->diffInDays($booking->event->date, false) < 7) {
+            return response()->json([
                 'success' => false,
                 'message' => "Cannot Cancel the Booking, This event starts with less than 7 days",
             ], 400);
         }
 
-        $booking->update(['status' => 'cancelled']);
-        $booking->event->increment('available_seats');
+        DB::transaction(function () use ($booking) {
+            $booking->update(['status' => 'cancelled']);
+            $booking->event->increment('available_seats');
+        });
 
         return response()->json([
             'success' => true,

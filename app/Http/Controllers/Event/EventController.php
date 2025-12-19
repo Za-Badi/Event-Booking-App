@@ -8,128 +8,91 @@ use App\Http\Requests\UpdateEventRequest;
 use App\Http\Resources\EventResource;
 use App\Models\Event;
 use App\Service\ImageService;
-use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
 
 class EventController extends Controller
 {
-    protected $imageService;
+    protected ImageService $imageService;
+
     public function __construct(ImageService $imageService)
     {
         $this->imageService = $imageService;
     }
     public function index()
     {
-        $events = Event::get();
-        return response()->json([
+        $events = Event::orderBy('date', 'desc')->paginate(10);
+        return EventResource::collection($events)->additional([
             'success' => true,
-            'count' => $events->count(),
-            'data' =>  EventResource::collection($events)
-        ], 200);
+            'total' => $events->total(),
+            'pages_left' => $events->lastPage() - $events->currentPage(),
+        ]);
     }
-    public function show($id)
+    public function show(Event $event)
     {
-        $event = Event::find($id);
-        if (!$event) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Event not found'
-            ], 404);
-        }
-        return response()->json([
-            'success' => true,
-            'data' => new EventResource($event)
-        ], 200);
+
+        return (new EventResource($event))->additional([
+            'success' => true
+        ]);
     }
-
-
 
 
     public function store(CreateEventRequest $request)
     {
-        $request->validated();
+        $this->authorize('manage', Event::class);
+        $data = $request->validated();
+        $event = DB::transaction(function () use ($data, $request) {
+            $event = Event::create($data);
 
-        // create
-        $event = Event::create([
-            'title' => $request->title,
-            'desc' => $request->desc,
-            'location' => $request->location,
-            'date' => $request->date,
-            'available_seats' => $request->available_seats,
-            'category_id' => $request->category_id,
+            if ($request->hasFile('images')) {
+                $this->imageService->createFile(
+                    $event,
+                    $request->file('images'),
+                    'event_images'
+                );
+            }
 
-        ]);
-        if ($request->hasFile('images')) {
-            $this->imageService->createFile($event, $request->file('images'), 'event_images');
-            // foreach ($request->file('images') as $image) {
-            //     $this->imageService->createFile($event, $image, 'event_images');
-            // }
-            // $event->addMediaFromRequest('images')->toMediaCollection('images');
-        }
+            return $event;
+        });
 
-        if (!$event) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Event not created'
-            ], 400);
-        }
-        // response
         return response()->json([
             'success' => true,
             'message' => 'Event created successfully',
-        ], 200);
+            'data' => new EventResource($event),
+        ], 201); // ✅ correct status
     }
 
-    // update
-    public function update(UpdateEventRequest $request, $id)
+    public function update(UpdateEventRequest $request, Event $event)
     {
-        $request->validated();
+        $this->authorize('update', $event);
 
-        $event = Event::find($id);
-        if (!$event) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Event not found'
-            ], 404);
-        }
+        $event = DB::transaction(function () use ($request, $event) {
+            $event->update($request->validated());
 
-        $event->update([
-            'title' => $request->title,
-            'desc' => $request->desc,
-            'location' => $request->location,
-            'date' => $request->date,
-            'available_seats' => $request->available_seats,
-            'category_id' => $request->category_id,
-        ]);
+            if ($request->hasFile('images')) {
+                $this->imageService->updateImages(
+                    $event,
+                    $request->file('images'),
+                    'event_images'
+                );
+            }
 
-        if ($request->hasFile('images')) {
-            $this->imageService->updateImages($event, $request->file('images'), 'event_images');
-            // $event->clearMediaCollection('event_images');
-            // foreach ($request->file('images') as $image) {
-            //     $this->imageService->createFile($event, $image, 'event_images');
-            // }
-        }
+            return $event->fresh();
+        });
 
         return response()->json([
             'success' => true,
             'message' => 'Event updated successfully',
-            'data' => new EventResource($event)
-        ], 200);
+            'data'    => new EventResource($event),
+        ]);
     }
 
     // delete
-    public function destroy($id)
+    public function destroy(Event $event)
     {
-        $event = Event::find($id);
-        if (!$event) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Event not found'
-            ], 404);
-        }
-
+        $this->authorize('delete', $event);
         $event->clearMediaCollection('event_images');
         $event->delete();
-
         return response()->json([
             'success' => true,
             'message' => 'Event deleted successfully'

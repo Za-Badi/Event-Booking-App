@@ -26,10 +26,12 @@ class UpdateEventRequest extends FormRequest
             'title' =>  ["required", "string", "max:255"],
             'desc' => ['required', 'string'],
             'location' => ['nullable', 'string', 'max:255'],
-            'date' => ['required', 'date'],
+            'date' => ['required', 'date_format:Y-m-d' ],
             'available_seats' => ['required', 'integer', 'min:1'],
             'category_id' => ['required', 'exists:categories,id'],
             'images.*' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,svg', 'max:51200'],
         ];
     }
+
+   
 }

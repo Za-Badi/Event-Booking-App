@@ -7,103 +7,68 @@ use App\Http\Requests\CreateCategory;
 use App\Http\Requests\UpdateCategory;
 use App\Http\Resources\CategoryResource;
 use App\Models\Category;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Redis;
+
+namespace App\Http\Controllers\Category;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\CreateCategory;
+use App\Http\Requests\UpdateCategory;
+use App\Http\Resources\CategoryResource;
+use App\Models\Category;
 
 class CategoryController extends Controller
 {
     public function index()
     {
+        $categories = Category::orderBy('title', 'asc')->paginate(10);
 
-        $categories = Category::get();
-        return response()->json([
+        return CategoryResource::collection($categories)->additional([
             'success' => true,
-            'count' => $categories->count(),
-            'data' =>  CategoryResource::collection($categories)
-        ], 200);
+            'total' => $categories->total(),
+            'pages_left' => $categories->lastPage() - $categories->currentPage(),
+        ]);
     }
-    public function show($id)
+
+    public function show(Category $category)
     {
-        $category = Category::find($id);
-        if (!$category) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Category not found'
-            ], 404);
-        }
-        return response()->json([
-            'success' => true,
-            'data' => new CategoryResource($category)
-        ], 200);
+        return (new CategoryResource($category))->additional([
+            'success' => true
+        ]);
     }
-
 
     public function store(CreateCategory $request)
     {
-        // validation
-        $request->validated();
+        $this->authorize('manage', Category::class);
 
-        //  create
-        $category = Category::create([
-            'title' => $request->title,
-        ]);
-        if (!$category) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Category not created'
-            ], 400);
-        }
-        // response
+        $category = Category::create($request->validated());
+
         return response()->json([
             'success' => true,
             'message' => 'Category created successfully',
-        ], 200);
+            'data' => new CategoryResource($category),
+        ], 201);
     }
-    public function update(UpdateCategory $request, $id)
+
+    public function update(UpdateCategory $request, Category $category)
     {
-        // validation
-        $request->validated();
+        $this->authorize('update', $category);
 
-        //  find
-        $category = Category::find($id);
-        if (!$category) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Category not found'
-            ], 404);
-        }
-        // update
-        $category->update([
-            'title' => $request->title,
-        ]);
+        $category->update($request->validated());
 
-
-        // response
         return response()->json([
             'success' => true,
             'message' => 'Category updated successfully',
-        ], 200);
+            'data' => new CategoryResource($category->fresh()),
+        ]);
     }
 
-      public function destroy($id)
+    public function destroy(Category $category)
     {
-      
-        //  find
-        $category = Category::find($id);
-        if (!$category) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Category not found'
-            ], 404);
-        }
-        // update
+        $this->authorize('delete', $category);
         $category->delete();
-      
-       
-        // response
         return response()->json([
             'success' => true,
             'message' => 'Category Deleted Successfully',
-        ], 200);
+        ]);
     }
 }

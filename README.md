@@ -1,51 +1,53 @@
-# Event Booking System (Laravel REST API)
+## 🔐 Authentication & Authorization
 
-## 📌 Overview
-A Laravel-based REST API that allows users to browse events, book tickets, and manage their bookings.
-The system includes role-based access control for admins and secure authentication using Laravel Sanctum.
+This API uses **Laravel Sanctum** for stateless, token-based authentication.
 
-## 🚀 Features
-- User authentication (Register/Login) using Laravel Sanctum
-- Role-based access (Admin / User)
-- Admin can manage categories and events
-- Users can view events and book tickets
-- Users can view and cancel their bookings
-- Media upload for events using Spatie Media Library
-- RESTful API with API Resources
+### Authentication
+- Users authenticate using email and password
+- A Bearer token is issued upon successful login
+- All protected endpoints require a valid Sanctum token
 
-## 🛠 Tech Stack
-- Laravel
-- MySQL
-- Laravel Sanctum
-- Spatie Media Library
-- REST API
+### Authorization
+Authorization is enforced using **Laravel Policies**.
 
-## 📂 API Endpoints
-### Auth
-- POST /register
-- POST /login
+Role-based access control:
+- **Admin**: manage categories and events
+- **User**: browse events, book and cancel bookings
+- **Guest**: read-only access
 
-### Categories (Admin)
-- GET /categories
-- POST /categories
-- PUT /categories/{id}
-- DELETE /categories/{id}
+All authorization failures return structured JSON responses.
 
-### Events
-- GET /events
-- GET /events/{id}
-- POST /events (Admin)
-- PUT /events/{id} (Admin)
-- DELETE /events/{id} (Admin)
-- POST /events/{id}/book
+---
 
-### Bookings
-- GET /my-bookings
-- DELETE /bookings/{id}
+## 🧪 Demo Credentials
 
-## 📈 What I Learned
-- Building secure REST APIs with Laravel
-- Token-based authentication using Sanctum
-- Role-based authorization
-- Media handling with Spatie Media Library
-- Designing real-world booking logic
+### Admin
+- Email: `admin@example.com`
+- Password: `password`
+
+### User
+- Email: `user@example.com`
+- Password: `password`
+
+---
+
+## ❗ Error Handling
+
+The API returns consistent, predictable error responses for all failure cases.
+
+### Error Responses
+| Status | Description |
+|------|------------|
+| **401** | Unauthenticated (missing or invalid token) |
+| **403** | Forbidden (insufficient permissions) |
+| **404** | Resource or endpoint not found |
+| **422** | Validation error |
+| **500** | Internal server error |
+
+### Example Error Response
+```json
+{
+  "success": false,
+  "message": "Unauthenticated. Please login.",
+  "error": "unauthenticated"
+}
